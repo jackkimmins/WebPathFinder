@@ -7,7 +7,7 @@ SOURCES = code.cpp
 
 # Build target
 $(TARGET): $(SOURCES)
-	$(CXX) $(CXXFLAGS)  $(SOURCES) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) $(SOURCES) -o $(TARGET)
 
 # Clean build
 clean:
