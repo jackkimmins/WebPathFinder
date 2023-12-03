@@ -1,6 +1,8 @@
 function getLatLon(address, callback) {
+    console.log(`Loading coordinates for: ${address}`);
     let cachedData = localStorage.getItem(address);
     if (cachedData) {
+        console.log(`Using cached data for: ${address}`);
         callback(JSON.parse(cachedData), true);
         return;
     }
@@ -10,18 +12,20 @@ function getLatLon(address, callback) {
             let { lat, lon, type } = response[0];
             let data = { address, lat, lon, type, isCached: false };
             localStorage.setItem(address, JSON.stringify(data));
+            console.log(`Coordinates loaded for: ${address}`);
             callback(data, false);
         } else {
-            console.log("No results found");
+            console.log(`No results found for: ${address}`);
             callback(null, false);
         }
     }).fail(function(xhr) {
-        console.log("Error: " + xhr.statusText);
+        console.log(`Error loading coordinates for ${address}: ` + xhr.statusText);
         if (xhr.status === 429) setTimeout(() => getLatLon(address, callback), 1000);
     });
 }
 
 function calculateDistanceMatrix(coordinates, addresses, callback) {
+    console.log("Generating distance matrix");
     let matrixCacheKey = 'distanceMatrix_' + addresses.join('|');
     let cachedMatrix = localStorage.getItem(matrixCacheKey);
 
@@ -42,11 +46,13 @@ function calculateDistanceMatrix(coordinates, addresses, callback) {
         });
 
         localStorage.setItem(matrixCacheKey, JSON.stringify(distanceMatrix));
+        console.log("Distance matrix generated");
         callback(distanceMatrix);
-    }).fail(xhr => console.error("Error: " + xhr.statusText));
+    }).fail(xhr => console.error("Error generating distance matrix: " + xhr.statusText));
 }
 
 function processAddresses(addresses, index, coordinates, callback) {
+    console.log(`Processing address ${index + 1}/${addresses.length}`);
     if (index < addresses.length) {
         getLatLon(addresses[index], function(latlon, isCached) {
             if (latlon) coordinates.push({ lat: latlon.lat, lon: latlon.lon });
@@ -54,24 +60,25 @@ function processAddresses(addresses, index, coordinates, callback) {
             isCached ? nextCall() : setTimeout(nextCall, 1000);
         });
     } else {
+        console.log("All addresses processed");
         callback(coordinates);
     }
 }
+
 Module.onRuntimeInitialized = _ => {
-    // let addresses = ["Taunton", "St Ives", "Bristol", "London", "Middlesbrough", "Weston-super-Mare", "Birmingham", "Manchester", "Liverpool", "Newcastle", "Edinburgh", "Glasgow", "Cardiff", "Swansea", "Exeter", "Plymouth", "Bournemouth"];
-    // let addresses = ["Los Angeles", "Kingman", "Grand Canyon Village", "Monument Valley", "Page", "Bryce Canyon City", "Zion National Park", "Las Vegas", "Death Valley", "Mammoth Lakes", "El Portal", "San Francisco", "Pismo Beach"];
     let addresses = ["Queen's College, Taunton", "Musgrove Park Hospital", "Rumwell Farm Shop and Restaurant", "Taunton Train Station", "Museum of Somerset", "Creech St Michael Baptist Church", "Richard Huish College", "Trull Waterfall"];
 
-
+    console.log("Starting address processing");
     processAddresses(addresses, 0, [], coordinates => {
         console.log("All coordinates:", coordinates);
         calculateDistanceMatrix(coordinates, addresses, distanceMatrix => {
             let csvContent = distanceMatrix.map(e => e.join(",")).join("\n");
+            console.log("Starting TSP Solver");
             let maze = new Module.TSPSolver(csvContent, 100);
             console.log(csvContent);
 
             let routeString = maze.run();
-            console.log("Route:", routeString);
+            console.log("Route calculated:", routeString);
 
             // Process and URL encode the route string to create a URL for Google Maps
             let routeCities = routeString.split("\n")
