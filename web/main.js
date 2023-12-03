@@ -66,7 +66,8 @@ function processAddresses(addresses, index, coordinates, callback) {
 }
 
 Module.onRuntimeInitialized = _ => {
-    let addresses = ["Queen's College, Taunton", "Musgrove Park Hospital", "Rumwell Farm Shop and Restaurant", "Taunton Train Station", "Museum of Somerset", "Creech St Michael Baptist Church", "Richard Huish College", "Trull Waterfall"];
+    // let addresses = ["Queen's College, Taunton", "Musgrove Park Hospital", "Rumwell Farm Shop and Restaurant", "Taunton Train Station", "Museum of Somerset", "Creech St Michael Baptist Church", "Richard Huish College", "Trull Waterfall"];
+    let addresses = ["Taunton", "Weston-super-Mare", "Bristol", "London", "St Ives", "Middlezoy", "Bridgwater", "Yeovil", "Exeter", "Bath", "Glastonbury", "Wells", "Minehead"];
 
     console.log("Starting address processing");
     processAddresses(addresses, 0, [], coordinates => {
@@ -82,7 +83,7 @@ Module.onRuntimeInitialized = _ => {
 
             // Process and URL encode the route string to create a URL for Google Maps
             let routeCities = routeString.split("\n")
-                .map(line => line.trim().split(" -> ")[0])
+                .map(line => line.trim().replace(/"/g, ''))
                 .map(city => encodeURIComponent(city));
             let url = "https://www.google.co.uk/maps/dir/" + routeCities.join('/');
 

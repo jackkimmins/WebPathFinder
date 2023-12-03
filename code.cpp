@@ -218,6 +218,8 @@ public:
             std::sort(population.routes.begin(), population.routes.end(), [](const Route& a, const Route& b) {
                 return a.distance < b.distance;
             });
+
+            std::cout << "Iteration " << iteration << ": " << population.routes[0].distance << std::endl;
         }
         // Return the best route found
         // return population.routes[0];
@@ -229,7 +231,7 @@ public:
 
             //Remove the quotes
             std::string name = city.name;
-            name.erase(std::remove(name.begin(), name.end(), '\"'), name.end());
+            // name.erase(std::remove(name.begin(), name.end(), ''), name.end());
             ss << name << std::endl;
         }
         return ss.str();
@@ -263,11 +265,10 @@ int main()
     //     City("E", 4)
     // };
 
-    // std::string csvData = " ,Taunton,St Ives,Bristol,London,Middlesbrough,Weston-super-Mare\nTaunton,0,229,76,245,491,46\nSt Ives,228,0,301,456,716,271\nBristol,75,301,0,191,425,37\nLondon,244,456,190,0,404,227\nMiddlesbrough,490,716,424,403,0,452\nWeston-super-Mare,46,272,37,227,452,0";
-
+    // std::string csvData = " ,Queen's College Taunton,Musgrove Park Hospital,Rumwell Farm Shop and Restaurant,Taunton Train Station,Museum of Somerset,Creech St Michael Baptist Church,Richard Huish College,Trull Waterfall\nQueen's College Taunton,0,2360,4519,4439,2368,8805,3571\nMusgrove Park Hospital,2360,0,4169,3978,1907,8345,3110\nRumwell Farm Shop and Restaurant,4756,4224,0,4826,4688,10938,5891\nTaunton Train Station,4364,4033,4881,0,2339,8004,3877\nMuseum of Somerset,2253,2041,4746,2287,0,6738,1627\nCreech St Michael Baptist Church,8354,8143,10922,8034,6673,0,6280\nRichard Huish College,3083,2887,5707,3861,1663,6294,0";
     // TSPSolver solver(csvData, 100);
-    // Route finalRoute = solver.run();
-    // std::cout << "Best Route: " << finalRoute.toString() << std::endl;
+    // std::string finalRoute = solver.run();
+    // std::cout << "Best Route: " << finalRoute << std::endl;
 
 
 
