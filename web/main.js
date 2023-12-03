@@ -58,9 +58,9 @@ function processAddresses(addresses, index, coordinates, callback) {
     }
 }
 Module.onRuntimeInitialized = _ => {
-    let addresses = ["Taunton", "St Ives", "Bristol", "London", "Middlesbrough", "Weston-super-Mare", "Birmingham", "Manchester", "Liverpool", "Newcastle", "Edinburgh", "Glasgow", "Cardiff", "Swansea", "Exeter", "Plymouth", "Bournemouth"];
+    // let addresses = ["Taunton", "St Ives", "Bristol", "London", "Middlesbrough", "Weston-super-Mare", "Birmingham", "Manchester", "Liverpool", "Newcastle", "Edinburgh", "Glasgow", "Cardiff", "Swansea", "Exeter", "Plymouth", "Bournemouth"];
     // let addresses = ["Los Angeles", "Kingman", "Grand Canyon Village", "Monument Valley", "Page", "Bryce Canyon City", "Zion National Park", "Las Vegas", "Death Valley", "Mammoth Lakes", "El Portal", "San Francisco", "Pismo Beach"];
-    // let addresses = ["Queen's College, Taunton", "Musgrove Park Hospital", "Rumwell Farm Shop and Restaurant", "Taunton Train Station", "Museum of Somerset", "Creech St Michael Baptist Church", "Richard Huish College", "Trull Waterfall"];
+    let addresses = ["Queen's College, Taunton", "Musgrove Park Hospital", "Rumwell Farm Shop and Restaurant", "Taunton Train Station", "Museum of Somerset", "Creech St Michael Baptist Church", "Richard Huish College", "Trull Waterfall"];
 
 
     processAddresses(addresses, 0, [], coordinates => {
