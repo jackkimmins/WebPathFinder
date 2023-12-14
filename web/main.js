@@ -115,11 +115,7 @@ Module.onRuntimeInitialized = _ => {
 
                 UpdateStatus("Complete!", 100);
         
-                //Remove quotes from route string
-                // Make routeDisplay in this format: London -> Paris -> Berlin
                 document.getElementById('routeDisplay').innerHTML = routeString.split("\n").map(line => line.trim().replace(/"/g, '')).filter(line => line).join(' ➡️ ');
-
-                // document.getElementById('routeDisplay').innerHTML = document.getElementById('routeDisplay').innerHTML.replace(/<li><\/li>/g, '');
                 document.getElementById('distanceDisplay').innerHTML = "Distance: " + Math.round(solver.GetBestRouteLength() / 1609.344 * 10) / 10 + " miles";
                 document.getElementById('routeLink').setAttribute('href', url);
                 document.getElementById('routeLink').innerHTML = 'View on Google Maps';
