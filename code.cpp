@@ -13,17 +13,18 @@
 class City {
 public:
     std::string name;
-    int index;
+    int index = -1;
 
     City(const std::string& name, int index) : name(name), index(index) {}
+    City() = default;
 };
 
 class Route {
 public:
     std::vector<City> cities;
-    double distance;
+    double distance = 0.0;
 
-    Route(const std::vector<City>& cities) : cities(cities), distance(0) {}
+    Route(const std::vector<City>& cities) : cities(cities) {}
 
     void calculateDistance(const std::vector<std::vector<double>>& distanceMatrix) {
         distance = 0;
@@ -34,12 +35,15 @@ public:
     }
 
     std::string toString() const {
-        std::string routeStr;
-        for (const auto& city : cities) {
-            routeStr += city.name + " -> ";
+        std::ostringstream routeStr;
+        for (size_t i = 0; i < cities.size(); ++i) {
+            routeStr << cities[i].name << (i < cities.size() - 1 ? " -> " : "");
         }
-        routeStr += cities.front().name; // Loop back to the start
-        return routeStr;
+        return routeStr.str();
+    }
+
+    bool operator<(const Route& other) const {
+        return this->distance < other.distance;
     }
 };
 
@@ -47,186 +51,171 @@ class Population {
 public:
     std::vector<Route> routes;
 
-    Population(size_t size) {
+    Population(size_t size) : routes() {
         routes.reserve(size);
-    }
-
-    void addRoute(const Route& route) {
-        routes.push_back(route);
     }
 };
 
 class TSPSolver {
 private:
+    bool isComplete = false;
     std::vector<std::vector<double>> distanceMatrix;
-    std::vector<City> cities; // Added to store cities
-    Population population;
+    std::vector<City> cities;
     std::mt19937 gen;
-    int maxIterations = 1000; // Example value for maximum iterations
-    int tournamentSize = 5; // Example value for tournament size
+    Population population;
+    std::uniform_real_distribution<double> dist;
+    std::uniform_int_distribution<> intDist;
 
-    void initializePopulation() {
-        for (size_t i = 0; i < population.routes.capacity(); ++i) {
-            std::vector<City> shuffledCities = cities;
-            std::shuffle(shuffledCities.begin(), shuffledCities.end(), gen);
-            Route newRoute(shuffledCities);
-            newRoute.calculateDistance(distanceMatrix);
-            population.addRoute(newRoute);
-        }
+    const size_t NUM_GENERATIONS = 1000;
+    const double MUTATION_RATE = 0.05;
+    const size_t TOURNAMENT_SELECTION_SIZE = 5;
+
+    double getRandomNumber(double min, double max) {
+        return dist(gen, decltype(dist)::param_type{min, max});
     }
 
-    Route& tournamentSelection() {
-        std::uniform_int_distribution<size_t> dist(0, population.routes.size() - 1);
-        Route& best = population.routes[dist(gen)];
-        for (int i = 0; i < tournamentSize; ++i) {
-            Route& rival = population.routes[dist(gen)];
-            if (rival.distance < best.distance) {
-                best = rival;
-            }
-        }
-        return best;
+    int getRandomIndex(size_t size) {
+        return intDist(gen, decltype(intDist)::param_type{0, static_cast<int>(size - 1)});
     }
 
-    void crossover(const Route& parent1, const Route& parent2, Route& child) {
-        std::uniform_int_distribution<size_t> dist(0, parent1.cities.size() - 1);
-        size_t start = dist(gen);
-        size_t end = dist(gen);
+    Route tournamentSelection(const Population& population) {
+        Population tournament(TOURNAMENT_SELECTION_SIZE);
+        for (size_t i = 0; i < TOURNAMENT_SELECTION_SIZE; ++i) {
+            tournament.routes.push_back(population.routes[getRandomIndex(population.routes.size())]);
+        }
+        return *std::min_element(tournament.routes.begin(), tournament.routes.end());
+    }
 
-        if (start > end) std::swap(start, end);
+    Route crossover(const Route& parent1, const Route& parent2) {
+        int start = getRandomIndex(parent1.cities.size());
+        int end = getRandomNumber(start, parent1.cities.size());
 
+        std::vector<City> childCities(parent1.cities.size());
         std::unordered_set<int> included;
-        for (size_t i = start; i <= end; ++i) {
-            child.cities[i] = parent1.cities[i];
+
+        for (int i = start; i < end; ++i) {
+            childCities[i] = parent1.cities[i];
             included.insert(parent1.cities[i].index);
         }
 
-        size_t currentIndex = (end + 1) % parent1.cities.size();
+        size_t curIndex = end % parent1.cities.size();
         for (const auto& city : parent2.cities) {
             if (included.find(city.index) == included.end()) {
-                child.cities[currentIndex] = city;
-                currentIndex = (currentIndex + 1) % parent1.cities.size();
+                childCities[curIndex] = city;
+                curIndex = (curIndex + 1) % parent1.cities.size();
             }
         }
-        child.calculateDistance(distanceMatrix);
+
+        return Route(childCities);
     }
 
     void mutate(Route& route) {
-        std::uniform_int_distribution<size_t> dist(0, route.cities.size() - 1);
-        size_t i = dist(gen);
-        size_t j = dist(gen);
-        std::swap(route.cities[i], route.cities[j]);
+        for (size_t i = 0; i < route.cities.size(); ++i) {
+            if (getRandomNumber(0, 1) < MUTATION_RATE) {
+                size_t swapIndex = getRandomIndex(route.cities.size());
+                std::swap(route.cities[i], route.cities[swapIndex]);
+            }
+        }
         route.calculateDistance(distanceMatrix);
     }
 
-    void twoOpt(Route& route) {
-        bool improvement = true;
-        while (improvement) {
-            improvement = false;
-            for (size_t i = 0; i < route.cities.size() - 1; ++i) {
-                for (size_t k = i + 1; k < route.cities.size(); ++k) {
-                    double delta = - distanceMatrix[route.cities[i].index][route.cities[(i + 1) % route.cities.size()].index]
-                                   - distanceMatrix[route.cities[k].index][route.cities[(k + 1) % route.cities.size()].index]
-                                   + distanceMatrix[route.cities[i].index][route.cities[k].index]
-                                   + distanceMatrix[route.cities[(i + 1) % route.cities.size()].index][route.cities[(k + 1) % route.cities.size()].index];
-
-                    if (delta < 0) {
-                        std::reverse(route.cities.begin() + i + 1, route.cities.begin() + k + 1);
-                        route.calculateDistance(distanceMatrix);
-                        improvement = true;
-                    }
-                }
-            }
+    // Population Initialization
+    void initializePopulation(size_t populationSize) {
+        for (size_t i = 0; i < populationSize; ++i) {
+            std::shuffle(cities.begin(), cities.end(), gen);
+            Route newRoute(cities);
+            newRoute.calculateDistance(distanceMatrix);
+            population.routes.push_back(newRoute);
         }
     }
 
-    void initializeFromCSV(const std::string& csvData) {
-        std::stringstream ss(csvData);
-        std::string line;
+void initializeFromCSV(const std::string& csvData) {
+    std::istringstream ss(csvData);
+    std::string line;
 
-        // First, read the header line to get city names
-        if (!std::getline(ss, line)) {
-            std::cerr << "Error reading CSV data." << std::endl;
-            return;
-        }
-
-        std::stringstream headerStream(line);
-        std::string cityName;
-
-        // Skip the first empty cell in the header
-        std::getline(headerStream, cityName, ',');
-
-        std::vector<City> cityNames;
-        int index = 0;
-        while (std::getline(headerStream, cityName, ',')) {
-            cityNames.emplace_back(cityName, index++);
-        }
-
-        // Now read the distances
-        std::vector<std::vector<double>> distanceMatrix;
-        while (std::getline(ss, line)) {
-            std::stringstream lineStream(line);
-            std::vector<double> distances;
-
-            // Read the city name (but don't use it)
-            std::getline(lineStream, cityName, ',');
-
-            double distance;
-            while (lineStream >> distance) {
-                distances.push_back(distance);
-
-                // If the next character is a comma, ignore it
-                if (lineStream.peek() == ',') {
-                    lineStream.ignore();
-                }
-            }
-
-            distanceMatrix.push_back(distances);
-        }
-
-        // Initialize the solver with the read data
-        this->cities = cityNames;
-        this->distanceMatrix = distanceMatrix;
-        initializePopulation(); // Assuming this reinitializes the population
+    // Read the header line to get city names
+    if (!std::getline(ss, line)) {
+        std::cerr << "Error reading CSV data." << std::endl;
+        return;
     }
+
+    std::vector<City> cityNames;
+    std::string cityName;
+    size_t index = 0;
+
+    // Read city names from the header, skipping the first empty cell
+    std::istringstream headerStream(line);
+    std::getline(headerStream, cityName, ','); // Skip first cell
+    while (std::getline(headerStream, cityName, ',')) {
+        cityNames.emplace_back(cityName, index++);
+    }
+
+    // Read the distances
+    std::vector<std::vector<double>> localDistanceMatrix;
+    double distance;
+    char comma;
+
+    while (std::getline(ss, line)) {
+        std::istringstream lineStream(line);
+        std::vector<double> distances;
+
+        std::getline(lineStream, cityName, ','); // Read and ignore city name
+
+        while (lineStream >> distance) {
+            distances.push_back(distance);
+            lineStream >> comma; // Read and ignore comma
+        }
+
+        localDistanceMatrix.push_back(std::move(distances));
+    }
+
+    this->cities = std::move(cityNames);
+    this->distanceMatrix = std::move(localDistanceMatrix);
+}
 
 public:
-    TSPSolver(const std::vector<std::vector<double>>& matrix, const std::vector<City>& inputCities, size_t populationSize) : distanceMatrix(matrix), cities(inputCities), population(populationSize) {
+    TSPSolver(const std::vector<std::vector<double>>& matrix, const std::vector<City>& inputCities, size_t populationSize) 
+    : distanceMatrix(matrix), cities(inputCities), population(populationSize),
+      dist(0.0, 1.0), intDist(0, static_cast<int>(inputCities.size() - 1)) {
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
-        gen = std::mt19937(seed);
-        initializePopulation();
+        gen.seed(seed);
+        initializePopulation(populationSize);
     }
 
-    TSPSolver(const std::string& csvData, size_t populationSize) : population(populationSize) {
+    TSPSolver(const std::string& csvData, size_t populationSize) 
+    : population(populationSize), dist(0.0, 1.0) {
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
-        gen = std::mt19937(seed);
+        gen.seed(seed);
         initializeFromCSV(csvData);
+        initializePopulation(populationSize);
     }
 
-    std::string run() {
-        for (int iteration = 0; iteration < maxIterations; ++iteration) {
-            // Perform crossover and mutation on selected individuals
+    bool run() {
+        for (size_t gen = 0; gen < NUM_GENERATIONS; ++gen) {
+            Population newPopulation(population.routes.size());
+
             for (size_t i = 0; i < population.routes.size(); ++i) {
-                Route& parent1 = tournamentSelection();
-                Route& parent2 = tournamentSelection();
-                Route child(cities);
-                crossover(parent1, parent2, child);
+                Route parent1 = tournamentSelection(population);
+                Route parent2 = tournamentSelection(population);
+                Route child = crossover(parent1, parent2);
                 mutate(child);
-                twoOpt(child); // Apply 2-opt local search
-                population.routes[i] = child;
+                newPopulation.routes.push_back(std::move(child));
             }
-            // Sort population by fitness (route distance)
-            std::sort(population.routes.begin(), population.routes.end(), [](const Route& a, const Route& b) {
-                return a.distance < b.distance;
-            });
 
-            std::cout << "Iteration " << iteration << ": " << population.routes[0].distance << std::endl;
+            population = std::move(newPopulation);
         }
-        // Return the best route found
-        // return population.routes[0];
 
-        //Return as csv
+        isComplete = true;
+        return true;
+    }
+
+    std::string GetBestRoute() {
+        if (!isComplete) return "Not complete";
+
+        const Route& bestRoute = *std::min_element(population.routes.begin(), population.routes.end());
+
         std::stringstream ss;
-        for (const auto& city : population.routes[0].cities) {
+        for (const auto& city : bestRoute.cities) {
             // ss << city.name << std::endl;
 
             //Remove the quotes
@@ -236,41 +225,25 @@ public:
         }
         return ss.str();
     }
+
+    int GetBestRouteLength() {
+        if (!isComplete) return -1;
+
+        const Route& bestRoute = *std::min_element(population.routes.begin(), population.routes.end());
+        return bestRoute.distance;
+    }
 };
 
 EMSCRIPTEN_BINDINGS(tsp_class) {
     emscripten::class_<TSPSolver>("TSPSolver")
     .constructor<const std::string&, size_t>()
     .function("run", &TSPSolver::run)
+    .function("GetBestRoute", &TSPSolver::GetBestRoute)
+    .function("GetBestRouteLength", &TSPSolver::GetBestRouteLength)
     ;
 };
 
 int main()
 {
-    // Create distance matrix
-    // std::vector<std::vector<double>> distanceMatrix = {
-    //     { 0, 1, 2, 3, 4 },
-    //     { 1, 0, 1, 2, 3 },
-    //     { 2, 1, 0, 1, 2 },
-    //     { 3, 2, 1, 0, 1 },
-    //     { 4, 3, 2, 1, 0 }
-    // };
-
-    // // Create cities
-    // std::vector<City> cities = {
-    //     City("A", 0),
-    //     City("B", 1),
-    //     City("C", 2),
-    //     City("D", 3),
-    //     City("E", 4)
-    // };
-
-    // std::string csvData = " ,Queen's College Taunton,Musgrove Park Hospital,Rumwell Farm Shop and Restaurant,Taunton Train Station,Museum of Somerset,Creech St Michael Baptist Church,Richard Huish College,Trull Waterfall\nQueen's College Taunton,0,2360,4519,4439,2368,8805,3571\nMusgrove Park Hospital,2360,0,4169,3978,1907,8345,3110\nRumwell Farm Shop and Restaurant,4756,4224,0,4826,4688,10938,5891\nTaunton Train Station,4364,4033,4881,0,2339,8004,3877\nMuseum of Somerset,2253,2041,4746,2287,0,6738,1627\nCreech St Michael Baptist Church,8354,8143,10922,8034,6673,0,6280\nRichard Huish College,3083,2887,5707,3861,1663,6294,0";
-    // TSPSolver solver(csvData, 100);
-    // std::string finalRoute = solver.run();
-    // std::cout << "Best Route: " << finalRoute << std::endl;
-
-
-
     return 0;
 }

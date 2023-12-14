@@ -15,7 +15,7 @@ function getLatLon(address, callback) {
             console.log(`Coordinates loaded for: ${address}`);
             callback(data, false);
         } else {
-            console.log(`No results found for: ${address}`);
+            alert(`No results found for: ${address}`);
             callback(null, false);
         }
     }).fail(function(xhr) {
@@ -52,7 +52,8 @@ function calculateDistanceMatrix(coordinates, addresses, callback) {
 }
 
 function processAddresses(addresses, index, coordinates, callback) {
-    console.log(`Processing address ${index + 1}/${addresses.length}`);
+    // Progress bar starts from 5% and ends at 50%
+    UpdateStatus(`Processing address ${addresses[index]} (${index + 1}/${addresses.length})`, 5 + (45 * index / addresses.length));
     if (index < addresses.length) {
         getLatLon(addresses[index], function(latlon, isCached) {
             if (latlon) coordinates.push({ lat: latlon.lat, lon: latlon.lon });
@@ -60,34 +61,69 @@ function processAddresses(addresses, index, coordinates, callback) {
             isCached ? nextCall() : setTimeout(nextCall, 1000);
         });
     } else {
-        console.log("All addresses processed");
         callback(coordinates);
     }
 }
 
+var module = null;
+
+function UpdateStatus(status, progress) {
+    document.getElementById('status').innerHTML = status;
+    document.getElementById('statusBar').style.width = progress + '%';
+}
+
+document.getElementById('demoRoutes').addEventListener('click', function(e) {
+    let addresses = e.target.dataset.demoroute.split(',').map(city => city.trim());
+    document.getElementById('cityInput').value = addresses.join('\n');
+});
+
 Module.onRuntimeInitialized = _ => {
-    // let addresses = ["Queen's College, Taunton", "Musgrove Park Hospital", "Rumwell Farm Shop and Restaurant", "Taunton Train Station", "Museum of Somerset", "Creech St Michael Baptist Church", "Richard Huish College", "Trull Waterfall"];
-    let addresses = ["Taunton", "Weston-super-Mare", "Bristol", "London", "St Ives", "Middlezoy", "Bridgwater", "Yeovil", "Exeter", "Bath", "Glastonbury", "Wells", "Minehead"];
+    console.log("Module loaded");
 
-    console.log("Starting address processing");
-    processAddresses(addresses, 0, [], coordinates => {
-        console.log("All coordinates:", coordinates);
-        calculateDistanceMatrix(coordinates, addresses, distanceMatrix => {
-            let csvContent = distanceMatrix.map(e => e.join(",")).join("\n");
-            console.log("Starting TSP Solver");
-            let maze = new Module.TSPSolver(csvContent, 100);
-            console.log(csvContent);
+    document.getElementById('inputContainer').addEventListener('submit', function(e) {
+        e.preventDefault();
 
-            let routeString = maze.run();
-            console.log("Route calculated:", routeString);
-
-            // Process and URL encode the route string to create a URL for Google Maps
-            let routeCities = routeString.split("\n")
-                .map(line => line.trim().replace(/"/g, ''))
-                .map(city => encodeURIComponent(city));
-            let url = "https://www.google.co.uk/maps/dir/" + routeCities.join('/');
-
-            console.log("URL:", url);
-        });
+        let input = document.getElementById('cityInput').value;
+        let addresses = input.split('\n').map(city => city.trim());
+        addresses = addresses.filter((city, index, self) => city.length > 0 && self.indexOf(city) === index);
+        UpdateStatus("Processing addresses...", 5);
+        CalculateRoute(addresses);
     });
+
+    function CalculateRoute(addresses) {
+        processAddresses(addresses, 0, [], coordinates => {
+            UpdateStatus("Loading distance matrix...", 60);
+            calculateDistanceMatrix(coordinates, addresses, distanceMatrix => {
+                let csvContent = distanceMatrix.map(e => e.join(",")).join("\n");
+                UpdateStatus("Calculating route...", 80);
+                let solver = new Module.TSPSolver(csvContent, 100);
+                console.log(csvContent);
+    
+                solver.run();
+
+                let routeString = solver.GetBestRoute();
+
+                UpdateStatus("Finishing up...", 90);
+
+                // Process and URL encode the route string to create a URL for Google Maps
+                let routeCities = routeString.split("\n")
+                    .map(line => line.trim().replace(/"/g, ''))
+                    .map(city => encodeURIComponent(city));
+                let url = "https://www.google.co.uk/maps/dir/" + routeCities.join('/');
+        
+                console.log("URL:", url);
+
+                UpdateStatus("Complete!", 100);
+        
+                //Remove quotes from route string
+                // Make routeDisplay in this format: London -> Paris -> Berlin
+                document.getElementById('routeDisplay').innerHTML = routeString.split("\n").map(line => line.trim().replace(/"/g, '')).filter(line => line).join(' ➡️ ');
+
+                // document.getElementById('routeDisplay').innerHTML = document.getElementById('routeDisplay').innerHTML.replace(/<li><\/li>/g, '');
+                document.getElementById('distanceDisplay').innerHTML = "Distance: " + Math.round(solver.GetBestRouteLength() / 1609.344 * 10) / 10 + " miles";
+                document.getElementById('routeLink').setAttribute('href', url);
+                document.getElementById('routeLink').innerHTML = 'View on Google Maps';
+            });
+        });
+    }
 };

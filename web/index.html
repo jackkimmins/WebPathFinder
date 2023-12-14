@@ -5,14 +5,51 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>jPath</title>
-    <!-- <link rel="stylesheet" href="style.css"> -->
+    <title>WebPathFinder</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
 </head>
 
 <body>
-    <div class="emscripten">
-        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-    </div>
+    <main class="container">
+        <h1>WebPathFinder: TSP Solver</h1>
+
+        <div id="demoRoutes" class="btn-group">
+            <button class="btn btn-primary btn-sm" data-demoroute="Queen's College Taunton, Musgrove Park Hospital, Rumwell Farm Shop and Restaurant, The New Mill Taunton, Museum of Somerset, Creech St Michael Baptist Church, Richard Huish College, Trull Waterfall Taunton">Demo 1</button>
+            <button class="btn btn-primary btn-sm" data-demoroute="St Ives,  Falmouth, Newquay, Torquay, Exmouth, Lyme Regis, Weston-super-Mare, Tenby, Bournemouth, Aberystwyth, Caernarfon, Blackpool, Redcar, Great Yarmouth, Dover">Demo 2</button>
+            <button class="btn btn-primary btn-sm" data-demoroute="Santa Monica Pier, Barstow, Oatman Arizona, Grand Canyon Village, Glen Canyon Dam, Bryce Canyon National Park, Bellagio Hotel & Casino, Death Valley Junction, Hoover Dam, Springdale Utah, El Portal, Fisherman's Wharf, Googleplex, Pismo Beach">Demo 3</button>
+        </div>
+
+        <p>Enter city names separated on new lines</p>
+
+        <form id="inputContainer">
+            <textarea class="form-control" id="cityInput" placeholder="Enter city names separated on new lines" cols="40" rows="30">Birmingham
+    Weston-super-Mare
+    Bristol
+    London
+    Manchester
+    Liverpool
+    </textarea>
+            <br>
+            <button id="solveButton" class="btn btn-primary btn-sm">Solve Route</button>
+        </form>
+
+        <p id="status"></p>
+        <div class="progress" role="progressbar">
+            <div id="statusBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+        </div>
+
+        <hr>
+
+        <div id="resultContainer">
+            <h2>Optimal Route:</h2>
+            <ol id="routeDisplay"></ol>
+
+            <h2 id="distanceDisplay">Distance:</h2>
+
+            <a href="" target="_blank" id="routeLink"></a>
+
+        </div>
+    </main>
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <script src="./wasm.js"></script>
