@@ -77,6 +77,15 @@ document.getElementById('demoRoutes').addEventListener('click', function(e) {
     document.getElementById('cityInput').value = addresses.join('\n');
 });
 
+document.getElementById('resetCache').addEventListener('click', function(e) {
+    // input for confirmation
+    let input = prompt("Are you sure you want to clear the cache? This will cause all coordinates to be reloaded from the API. Type 'yes' to confirm.");
+    if (input === "yes") {
+        localStorage.clear();
+        alert("Cache Cleared!");
+    }
+});
+
 Module.onRuntimeInitialized = _ => {
     console.log("Module loaded");
 

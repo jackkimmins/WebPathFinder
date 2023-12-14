@@ -9,20 +9,28 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
 </head>
 
-<body>
-    <main class="container">
-        <h1>WebPathFinder: TSP Solver</h1>
+<body class="bg-dark text-white pt-4">
+    <main class="container p-4 bg-white text-dark">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h1 class="m-0">WebPathFinder: TSP Solver</h1>
+            <button id="resetCache" class="btn btn-danger btn-sm">Reset Cache</button>
+        </div>
+        
+        <p>Lorem ipsum dolor, sit amet consectetur adipisicing elit. Error iure non facilis odio. Minus culpa nemo minima odit dolorem nam, iusto reiciendis. Dolor veritatis quod harum suscipit tempore ullam aperiam!</p>
+        <hr>
 
-        <div id="demoRoutes" class="btn-group">
-            <button class="btn btn-primary btn-sm" data-demoroute="Queen's College Taunton, Musgrove Park Hospital, Rumwell Farm Shop and Restaurant, The New Mill Taunton, Museum of Somerset, Creech St Michael Baptist Church, Richard Huish College, Trull Waterfall Taunton">Demo 1</button>
-            <button class="btn btn-primary btn-sm" data-demoroute="St Ives,  Falmouth, Newquay, Torquay, Exmouth, Lyme Regis, Weston-super-Mare, Tenby, Bournemouth, Aberystwyth, Caernarfon, Blackpool, Redcar, Great Yarmouth, Dover">Demo 2</button>
-            <button class="btn btn-primary btn-sm" data-demoroute="Santa Monica Pier, Barstow, Oatman Arizona, Mammoth Lakes, Grand Canyon Village, Glen Canyon Dam, Badwater, Bryce Canyon National Park, Monument Valley, Bellagio Hotel & Casino, Death Valley Junction, Hoover Dam, Springdale Utah, Yosemite Valley, Fisherman's Wharf, Googleplex, Pismo Beach">Demo 3</button>
+        <div class="d-flex justify-content-between align-items-center mt-2 mb-2">
+            <span>Enter city names separated on new lines:</span>
+
+            <div id="demoRoutes" class="btn-group">
+                <button class="btn btn-primary btn-sm" data-demoroute="Queen's College Taunton, Musgrove Park Hospital, Rumwell Farm Shop and Restaurant, The New Mill Taunton, Museum of Somerset, Creech St Michael Baptist Church, Richard Huish College, Trull Waterfall Taunton">Demo 1</button>
+                <button class="btn btn-primary btn-sm" data-demoroute="St Ives,  Falmouth, Newquay, Torquay, Exmouth, Lyme Regis, Weston-super-Mare, Tenby, Bournemouth, Aberystwyth, Caernarfon, Blackpool, Redcar, Great Yarmouth, Dover">Demo 2</button>
+                <button class="btn btn-primary btn-sm" data-demoroute="Santa Monica Pier, Barstow, Oatman Arizona, Mammoth Lakes, Grand Canyon Village, Glen Canyon Dam, Golden Gate Bridge, Badwater, Bryce Canyon National Park, Monument Valley, Bellagio Hotel & Casino, Death Valley Junction, Hoover Dam, Springdale Utah, Yosemite Valley, Fisherman's Wharf, Googleplex, Pismo Beach">Demo 3</button>
+            </div>
         </div>
 
-        <p>Enter city names separated on new lines</p>
-
         <form id="inputContainer">
-            <textarea class="form-control" id="cityInput" placeholder="Enter city names separated on new lines" cols="40" rows="30">Birmingham
+            <textarea class="form-control" id="cityInput" placeholder="Enter city names separated on new lines" cols="40" rows="20">Birmingham
 Middlesbrough
 Taunton
 Bristol
@@ -34,18 +42,18 @@ Southampton</textarea>
             <button id="solveButton" class="btn btn-primary btn-sm">Solve Route</button>
         </form>
 
-        <p id="status"></p>
-        <div class="progress" role="progressbar">
+        <div class="progress mt-3" role="progressbar">
             <div id="statusBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
         </div>
+        <p id="status"></p>
 
         <hr>
 
         <div id="resultContainer">
-            <h2>Optimal Route:</h2>
-            <ol id="routeDisplay"></ol>
+            <h2>Route Solution</h2>
+            <p id="routeDisplay" class="text-center w-100"></p>
 
-            <h2 id="distanceDisplay">Distance:</h2>
+            <p id="distanceDisplay">Distance: N/A</p>
 
             <a href="" target="_blank" id="routeLink"></a>
 
