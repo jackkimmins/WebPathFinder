@@ -78,6 +78,34 @@ private:
         return intDist(gen, decltype(intDist)::param_type{0, static_cast<int>(size - 1)});
     }
 
+    Route nearestNeighborRoute(int startCityIndex) {
+        std::vector<City> nnRoute;
+        nnRoute.reserve(cities.size());
+
+        std::unordered_set<int> visitedCities;
+        visitedCities.insert(startCityIndex);
+        nnRoute.push_back(cities[startCityIndex]);
+
+        int currentCityIndex = startCityIndex;
+        while (nnRoute.size() < cities.size()) {
+            double minDistance = std::numeric_limits<double>::max();
+            int nearestCityIndex = -1;
+
+            for (int i = 0; i < cities.size(); ++i) {
+                if (visitedCities.find(i) == visitedCities.end() && distanceMatrix[currentCityIndex][i] < minDistance) {
+                    minDistance = distanceMatrix[currentCityIndex][i];
+                    nearestCityIndex = i;
+                }
+            }
+
+            nnRoute.push_back(cities[nearestCityIndex]);
+            visitedCities.insert(nearestCityIndex);
+            currentCityIndex = nearestCityIndex;
+        }
+
+        return Route(nnRoute);
+    }
+
     Route tournamentSelection(const Population& population) {
         Population tournament(TOURNAMENT_SELECTION_SIZE);
         for (size_t i = 0; i < TOURNAMENT_SELECTION_SIZE; ++i) {
@@ -121,57 +149,59 @@ private:
 
     // Population Initialization
     void initializePopulation(size_t populationSize) {
+        population.routes.clear();
+
         for (size_t i = 0; i < populationSize; ++i) {
-            std::shuffle(cities.begin(), cities.end(), gen);
-            Route newRoute(cities);
-            newRoute.calculateDistance(distanceMatrix);
-            population.routes.push_back(newRoute);
+            int startCityIndex = getRandomIndex(cities.size());
+            Route nnRoute = nearestNeighborRoute(startCityIndex);
+            nnRoute.calculateDistance(distanceMatrix);
+            population.routes.push_back(nnRoute);
         }
     }
 
-void initializeFromCSV(const std::string& csvData) {
-    std::istringstream ss(csvData);
-    std::string line;
+    void initializeFromCSV(const std::string& csvData) {
+        std::istringstream ss(csvData);
+        std::string line;
 
-    // Read the header line to get city names
-    if (!std::getline(ss, line)) {
-        std::cerr << "Error reading CSV data." << std::endl;
-        return;
-    }
-
-    std::vector<City> cityNames;
-    std::string cityName;
-    size_t index = 0;
-
-    // Read city names from the header, skipping the first empty cell
-    std::istringstream headerStream(line);
-    std::getline(headerStream, cityName, ','); // Skip first cell
-    while (std::getline(headerStream, cityName, ',')) {
-        cityNames.emplace_back(cityName, index++);
-    }
-
-    // Read the distances
-    std::vector<std::vector<double>> localDistanceMatrix;
-    double distance;
-    char comma;
-
-    while (std::getline(ss, line)) {
-        std::istringstream lineStream(line);
-        std::vector<double> distances;
-
-        std::getline(lineStream, cityName, ','); // Read and ignore city name
-
-        while (lineStream >> distance) {
-            distances.push_back(distance);
-            lineStream >> comma; // Read and ignore comma
+        // Read the header line to get city names
+        if (!std::getline(ss, line)) {
+            std::cerr << "Error reading CSV data." << std::endl;
+            return;
         }
 
-        localDistanceMatrix.push_back(std::move(distances));
-    }
+        std::vector<City> cityNames;
+        std::string cityName;
+        size_t index = 0;
 
-    this->cities = std::move(cityNames);
-    this->distanceMatrix = std::move(localDistanceMatrix);
-}
+        // Read city names from the header, skipping the first empty cell
+        std::istringstream headerStream(line);
+        std::getline(headerStream, cityName, ','); // Skip first cell
+        while (std::getline(headerStream, cityName, ',')) {
+            cityNames.emplace_back(cityName, index++);
+        }
+
+        // Read the distances
+        std::vector<std::vector<double>> localDistanceMatrix;
+        double distance;
+        char comma;
+
+        while (std::getline(ss, line)) {
+            std::istringstream lineStream(line);
+            std::vector<double> distances;
+
+            std::getline(lineStream, cityName, ','); // Read and ignore city name
+
+            while (lineStream >> distance) {
+                distances.push_back(distance);
+                lineStream >> comma; // Read and ignore comma
+            }
+
+            localDistanceMatrix.push_back(std::move(distances));
+        }
+
+        this->cities = std::move(cityNames);
+        this->distanceMatrix = std::move(localDistanceMatrix);
+    }
 
 public:
     TSPSolver(const std::vector<std::vector<double>>& matrix, const std::vector<City>& inputCities, size_t populationSize) 
