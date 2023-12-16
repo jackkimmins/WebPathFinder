@@ -13,23 +13,21 @@
 class City {
 public:
     std::string name;
-    int index = -1;
+    int index;
 
-    City(const std::string& name, int index) : name(name), index(index) {}
+    City(std::string name, int index) : name(std::move(name)), index(index) {}
     City() = default;
 };
 
-class Route {
-public:
+struct Route {
     std::vector<City> cities;
     double distance = 0.0;
 
-    Route(const std::vector<City>& cities) : cities(cities) {}
+    explicit Route(std::vector<City> cities) : cities(std::move(cities)) {}
 
     void CalculateDistance(const std::vector<std::vector<double>>& distanceMatrix) {
-        distance = 0;
-        size_t numCities = cities.size();
-        for (size_t i = 0; i < numCities - 1; ++i) {
+        distance = 0.0;
+        for (size_t i = 0, n = cities.size(); i < n - 1; ++i) {
             distance += distanceMatrix[cities[i].index][cities[i + 1].index];
         }
         distance += distanceMatrix[cities.back().index][cities.front().index];
@@ -37,14 +35,14 @@ public:
 
     std::string ToString() const {
         std::ostringstream routeStr;
-        for (size_t i = 0; i < cities.size(); ++i) {
-            routeStr << cities[i].name << (i < cities.size() - 1 ? " -> " : "");
+        for (size_t i = 0, n = cities.size(); i < n; ++i) {
+            routeStr << cities[i].name << (i < n - 1 ? " -> " : "");
         }
         return routeStr.str();
     }
 
     bool operator<(const Route& other) const {
-        return this->distance < other.distance;
+        return distance < other.distance;
     }
 };
 
