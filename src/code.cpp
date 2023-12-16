@@ -25,14 +25,17 @@ struct Route {
 
     explicit Route(std::vector<City> cities) : cities(std::move(cities)) {}
 
+    // Calculate the total distance of the route based on a given distance matrix
     void CalculateDistance(const std::vector<std::vector<double>>& distanceMatrix) {
         distance = 0.0;
         for (size_t i = 0, n = cities.size(); i < n - 1; ++i) {
             distance += distanceMatrix[cities[i].index][cities[i + 1].index];
         }
+        // Add distance from last city to the first city to complete the loop
         distance += distanceMatrix[cities.back().index][cities.front().index];
     }
 
+    // String representation of the route
     std::string ToString() const {
         std::ostringstream routeStr;
         for (size_t i = 0, n = cities.size(); i < n; ++i) {
@@ -57,27 +60,31 @@ public:
 
 class TSPSolver {
 private:
-    bool isComplete = false;
-    std::vector<std::vector<double>> distanceMatrix;
-    std::vector<City> cities;
-    std::mt19937 gen;
-    Population population;
-    std::uniform_real_distribution<double> dist;
-    std::uniform_int_distribution<> intDist;
+    bool isComplete = false;                            // Flag to check if the solution is complete
+    std::vector<std::vector<double>> distanceMatrix;    // Matrix to store distances between cities
+    std::vector<City> cities;                           // Vector of cities
+    std::mt19937 gen;                                   // Mersenne Twister random number generator
+    Population population;                              // Population of routes
+    std::uniform_real_distribution<double> dist;        // Distribution for real numbers
+    std::uniform_int_distribution<> intDist;            // Distribution for integers
 
-    size_t currentGeneration = 0;
+    size_t currentGeneration = 0;                       // Current generation count in the genetic algorithm
 
+    // Constants for the genetic algorithm
     const size_t NUM_GENERATIONS = 1000;
     const double MUTATION_RATE = 0.05;
 
+    // Generate a random real number within a range
     double GetRandomNumber(double min, double max) {
         return dist(gen, decltype(dist)::param_type{min, max});
     }
 
+    // Generate a random index within a range
     int GetRandomIndex(size_t size) {
         return intDist(gen, decltype(intDist)::param_type{0, static_cast<int>(size - 1)});
     }
 
+    // Generate a route using the Nearest Neighbour algorithm
     Route NearestNeighbourRoute(int startCityIndex) {
         std::vector<City> nnRoute;
         nnRoute.reserve(cities.size());
@@ -87,10 +94,12 @@ private:
         nnRoute.push_back(cities[startCityIndex]);
 
         int currentCityIndex = startCityIndex;
+        // Loop to construct the route
         while (nnRoute.size() < cities.size()) {
             double minDistance = std::numeric_limits<double>::max();
             int nearestCityIndex = -1;
 
+            // Find the nearest unvisited city
             for (int i = 0; i < cities.size(); ++i) {
                 if (visitedCities.find(i) == visitedCities.end() && distanceMatrix[currentCityIndex][i] < minDistance) {
                     minDistance = distanceMatrix[currentCityIndex][i];
@@ -106,6 +115,7 @@ private:
         return Route(nnRoute);
     }
 
+    // Calculate the total inverse distance of all routes in a population
     double GetTotalInverseDistance(const Population& population) {
         double totalInverseDistance = 0.0;
         for (const auto& route : population.routes) {
@@ -116,6 +126,7 @@ private:
         return totalInverseDistance;
     }
 
+    // Select a route from the population using the Roulette Wheel Selection method
     Route RouletteWheelSelection(const Population& population) {
         double totalInverseDistance = GetTotalInverseDistance(population);
         double slice = GetRandomNumber(0, totalInverseDistance);
@@ -133,6 +144,7 @@ private:
         return population.routes[GetRandomIndex(population.routes.size())];
     }
 
+    // Perform genetic crossover between two parent routes
     Route Crossover(const Route& parent1, const Route& parent2) {
         int start = GetRandomIndex(parent1.cities.size());
         int end = GetRandomNumber(start, parent1.cities.size());
@@ -140,11 +152,13 @@ private:
         std::vector<City> childCities(parent1.cities.size());
         std::unordered_set<int> included;
 
+        // Copy a segment from parent1 to child
         for (int i = start; i < end; ++i) {
             childCities[i] = parent1.cities[i];
             included.insert(parent1.cities[i].index);
         }
 
+        // Fill the rest of child with cities from parent2
         size_t curIndex = end % parent1.cities.size();
         for (const auto& city : parent2.cities) {
             if (included.find(city.index) == included.end()) {
@@ -156,15 +170,17 @@ private:
         return Route(childCities);
     }
 
-    // Measure population diversity
+    // Calculate the diversity of a population
     double CalculateDiversity(const Population& population) {
         double meanDistance = 0.0;
+        // Calculate mean distance of all routes
         for (const auto& route : population.routes) {
             meanDistance += route.distance;
         }
         meanDistance /= population.routes.size();
 
         double variance = 0.0;
+        // Calculate variance of distances
         for (const auto& route : population.routes) {
             double diff = route.distance - meanDistance;
             variance += diff * diff;
@@ -173,6 +189,7 @@ private:
         return variance;
     }
 
+    // Mutate a route
     void Mutate(Route& route) {
         double diversity = CalculateDiversity(population);
         double adaptiveMutationRate = MUTATION_RATE;
@@ -182,6 +199,7 @@ private:
             adaptiveMutationRate *= 2;
         }
 
+        // Mutate each city in the route
         for (size_t i = 0; i < route.cities.size(); ++i) {
             if (GetRandomNumber(0, 1) < adaptiveMutationRate) {
                 size_t swapIndex = GetRandomIndex(route.cities.size());
@@ -191,7 +209,7 @@ private:
         route.CalculateDistance(distanceMatrix);
     }
 
-    // Population Initialisation
+    // Initialise the population with nearest neighbour routes
     void InitialisePopulation(size_t populationSize) {
         population.routes.clear();
 
@@ -203,6 +221,7 @@ private:
         }
     }
 
+    // Apply the 3-opt optimisation algorithm on a route
     void ThreeOpt(Route& route) {
         bool improvement = true;
         while (improvement) {
@@ -311,7 +330,7 @@ public:
                 Route parent2 = RouletteWheelSelection(population);
                 Route child = Crossover(parent1, parent2);
                 Mutate(child);
-                ThreeOpt(child); // Apply 3-opt optimization
+                ThreeOpt(child); // Apply 3-opt optimisation
                 newPopulation.routes.push_back(std::move(child));
             }
 
