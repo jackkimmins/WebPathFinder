@@ -7,7 +7,7 @@ function getLatLon(address, callback) {
         return;
     }
 
-    $.get("https://geocode.maps.co/search", { q: address, format: 'json' }, function(response) {
+    $.get("https://nominatim.openstreetmap.org/search.php", { q: address, format: 'json' }, function(response) {
         if (response.length > 0) {
             let { lat, lon, type } = response[0];
             let data = { address, lat, lon, type, isCached: false };
