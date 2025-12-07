@@ -9,6 +9,8 @@
 #include <random>
 #include <chrono>
 #include <sstream>
+#include <limits>
+#include <numeric>
 
 class City {
 public:
@@ -19,232 +21,306 @@ public:
     City() = default;
 };
 
-struct Route {
-    std::vector<City> cities;
-    double distance = 0.0;
-
-    explicit Route(std::vector<City> cities) : cities(std::move(cities)) {}
-
-    // Calculate the total distance of the route based on a given distance matrix
-    void CalculateDistance(const std::vector<std::vector<double>>& distanceMatrix) {
-        distance = 0.0;
-        for (size_t i = 0, n = cities.size(); i < n - 1; ++i) {
-            distance += distanceMatrix[cities[i].index][cities[i + 1].index];
-        }
-        // Add distance from last city to the first city to complete the loop
-        distance += distanceMatrix[cities.back().index][cities.front().index];
-    }
-
-    // String representation of the route
-    std::string ToString() const {
-        std::ostringstream routeStr;
-        for (size_t i = 0, n = cities.size(); i < n; ++i) {
-            routeStr << cities[i].name << (i < n - 1 ? " -> " : "");
-        }
-        return routeStr.str();
-    }
-
-    bool operator<(const Route& other) const {
-        return distance < other.distance;
-    }
-};
-
-class Population {
-public:
-    std::vector<Route> routes;
-
-    Population(size_t size) : routes() {
-        routes.reserve(size);
-    }
-};
-
 class TSPSolver {
 private:
-    bool isComplete = false;                            // Flag to check if the solution is complete
-    std::vector<std::vector<double>> distanceMatrix;    // Matrix to store distances between cities
-    std::vector<City> cities;                           // Vector of cities
-    std::mt19937 gen;                                   // Mersenne Twister random number generator
-    Population population;                              // Population of routes
-    std::uniform_real_distribution<double> dist;        // Distribution for real numbers
-    std::uniform_int_distribution<> intDist;            // Distribution for integers
+    bool isComplete = false;
+    std::vector<std::vector<double>> distanceMatrix;
+    std::vector<City> cities;
+    std::vector<int> bestPath;
+    double bestDistance = std::numeric_limits<double>::max();
+    std::mt19937 gen;
 
-    size_t currentGeneration = 0;                       // Current generation count in the genetic algorithm
+    // Threshold for using exact algorithms (can handle up to ~12 cities with brute force quickly)
+    static const size_t EXACT_THRESHOLD = 12;
+    // Threshold for branch and bound (can handle up to ~18 cities reasonably)
+    static const size_t BRANCH_BOUND_THRESHOLD = 18;
 
-    // Constants for the genetic algorithm
-    const size_t NUM_GENERATIONS = 1000;
-    const double MUTATION_RATE = 0.05;
-
-    // Generate a random real number within a range
-    double GetRandomNumber(double min, double max) {
-        return dist(gen, decltype(dist)::param_type{min, max});
-    }
-
-    // Generate a random index within a range
-    int GetRandomIndex(size_t size) {
-        return intDist(gen, decltype(intDist)::param_type{0, static_cast<int>(size - 1)});
-    }
-
-    // Generate a route using the Nearest Neighbour algorithm
-    Route NearestNeighbourRoute(int startCityIndex) {
-        std::vector<City> nnRoute;
-        nnRoute.reserve(cities.size());
-
-        std::unordered_set<int> visitedCities;
-        visitedCities.insert(startCityIndex);
-        nnRoute.push_back(cities[startCityIndex]);
-
-        int currentCityIndex = startCityIndex;
-        // Loop to construct the route
-        while (nnRoute.size() < cities.size()) {
-            double minDistance = std::numeric_limits<double>::max();
-            int nearestCityIndex = -1;
-
-            // Find the nearest unvisited city
-            for (int i = 0; i < cities.size(); ++i) {
-                if (visitedCities.find(i) == visitedCities.end() && distanceMatrix[currentCityIndex][i] < minDistance) {
-                    minDistance = distanceMatrix[currentCityIndex][i];
-                    nearestCityIndex = i;
-                }
-            }
-
-            nnRoute.push_back(cities[nearestCityIndex]);
-            visitedCities.insert(nearestCityIndex);
-            currentCityIndex = nearestCityIndex;
+    // Calculate path distance (open path - no return to start)
+    double CalculatePathDistance(const std::vector<int>& path) const {
+        double dist = 0.0;
+        for (size_t i = 0; i < path.size() - 1; ++i) {
+            dist += distanceMatrix[path[i]][path[i + 1]];
         }
-
-        return Route(nnRoute);
+        return dist;
     }
 
-    // Calculate the total inverse distance of all routes in a population
-    double GetTotalInverseDistance(const Population& population) {
-        double totalInverseDistance = 0.0;
-        for (const auto& route : population.routes) {
-            if (route.distance > 0) {
-                totalInverseDistance += 1.0 / route.distance;
-            }
+    // Calculate tour distance (closed loop - returns to start)
+    double CalculateTourDistance(const std::vector<int>& path) const {
+        double dist = CalculatePathDistance(path);
+        if (!path.empty()) {
+            dist += distanceMatrix[path.back()][path.front()];
         }
-        return totalInverseDistance;
+        return dist;
     }
 
-    // Select a route from the population using the Roulette Wheel Selection method
-    Route RouletteWheelSelection(const Population& population) {
-        double totalInverseDistance = GetTotalInverseDistance(population);
-        double slice = GetRandomNumber(0, totalInverseDistance);
-        double currentSum = 0.0;
+    // ==================== EXACT ALGORITHMS ====================
 
-        for (const auto& route : population.routes) {
-            if (route.distance > 0) {
-                currentSum += 1.0 / route.distance;
-                if (currentSum >= slice) {
-                    return route;
-                }
+    // Brute force - guaranteed optimal for small instances
+    void SolveBruteForce() {
+        std::vector<int> path(cities.size());
+        std::iota(path.begin(), path.end(), 0);
+
+        bestDistance = std::numeric_limits<double>::max();
+        
+        do {
+            double dist = CalculateTourDistance(path);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestPath = path;
+            }
+        } while (std::next_permutation(path.begin(), path.end()));
+    }
+
+    // Branch and Bound with pruning - optimal for medium instances
+    void BranchAndBound() {
+        size_t n = cities.size();
+        std::vector<int> currentPath;
+        std::vector<bool> visited(n, false);
+        
+        // Start with a good upper bound using nearest neighbor heuristic
+        std::vector<int> nnPath = NearestNeighborPath(0);
+        bestDistance = CalculateTourDistance(nnPath);
+        bestPath = nnPath;
+        
+        // Try starting from each city and apply 2-opt to improve
+        for (size_t start = 0; start < n; ++start) {
+            std::vector<int> path = NearestNeighborPath(start);
+            TwoOptImprove(path);
+            double dist = CalculateTourDistance(path);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestPath = path;
             }
         }
-        // In case of rounding errors, return a random route
-        return population.routes[GetRandomIndex(population.routes.size())];
+        
+        // Now do branch and bound with this upper bound
+        currentPath.push_back(0);
+        visited[0] = true;
+        BranchAndBoundRecursive(currentPath, visited, 0.0);
     }
 
-    // Perform genetic crossover between two parent routes
-    Route Crossover(const Route& parent1, const Route& parent2) {
-        int start = GetRandomIndex(parent1.cities.size());
-        int end = GetRandomNumber(start, parent1.cities.size());
-
-        std::vector<City> childCities(parent1.cities.size());
-        std::unordered_set<int> included;
-
-        // Copy a segment from parent1 to child
-        for (int i = start; i < end; ++i) {
-            childCities[i] = parent1.cities[i];
-            included.insert(parent1.cities[i].index);
+    void BranchAndBoundRecursive(std::vector<int>& currentPath, std::vector<bool>& visited, double currentDist) {
+        size_t n = cities.size();
+        
+        if (currentPath.size() == n) {
+            // Complete tour - add return to start
+            double totalDist = currentDist + distanceMatrix[currentPath.back()][currentPath.front()];
+            if (totalDist < bestDistance) {
+                bestDistance = totalDist;
+                bestPath = currentPath;
+            }
+            return;
         }
 
-        // Fill the rest of child with cities from parent2
-        size_t curIndex = end % parent1.cities.size();
-        for (const auto& city : parent2.cities) {
-            if (included.find(city.index) == included.end()) {
-                childCities[curIndex] = city;
-                curIndex = (curIndex + 1) % parent1.cities.size();
+        // Calculate lower bound for remaining path
+        double lowerBound = currentDist + CalculateLowerBound(visited, currentPath.back());
+        if (lowerBound >= bestDistance) {
+            return; // Prune this branch
+        }
+
+        // Try adding each unvisited city
+        for (size_t i = 0; i < n; ++i) {
+            if (!visited[i]) {
+                double newDist = currentDist + distanceMatrix[currentPath.back()][i];
+                
+                // Early pruning
+                if (newDist >= bestDistance) continue;
+                
+                visited[i] = true;
+                currentPath.push_back(i);
+                
+                BranchAndBoundRecursive(currentPath, visited, newDist);
+                
+                currentPath.pop_back();
+                visited[i] = false;
             }
         }
-
-        return Route(childCities);
     }
 
-    // Calculate the diversity of a population
-    double CalculateDiversity(const Population& population) {
-        double meanDistance = 0.0;
-        // Calculate mean distance of all routes
-        for (const auto& route : population.routes) {
-            meanDistance += route.distance;
-        }
-        meanDistance /= population.routes.size();
-
-        double variance = 0.0;
-        // Calculate variance of distances
-        for (const auto& route : population.routes) {
-            double diff = route.distance - meanDistance;
-            variance += diff * diff;
-        }
-        variance /= population.routes.size();
-        return variance;
-    }
-
-    // Mutate a route
-    void Mutate(Route& route) {
-        double diversity = CalculateDiversity(population);
-        double adaptiveMutationRate = MUTATION_RATE;
-
-        // Increase mutation rate if diversity is low
-        if (diversity < 0.6) {
-            adaptiveMutationRate *= 2;
-        }
-
-        // Mutate each city in the route
-        for (size_t i = 0; i < route.cities.size(); ++i) {
-            if (GetRandomNumber(0, 1) < adaptiveMutationRate) {
-                size_t swapIndex = GetRandomIndex(route.cities.size());
-                std::swap(route.cities[i], route.cities[swapIndex]);
+    // Calculate lower bound using minimum edge heuristic
+    double CalculateLowerBound(const std::vector<bool>& visited, int lastCity) const {
+        double bound = 0.0;
+        size_t n = cities.size();
+        
+        // Minimum edge from last city to any unvisited city
+        double minFromLast = std::numeric_limits<double>::max();
+        for (size_t i = 0; i < n; ++i) {
+            if (!visited[i]) {
+                minFromLast = std::min(minFromLast, distanceMatrix[lastCity][i]);
             }
         }
-        route.CalculateDistance(distanceMatrix);
-    }
-
-    // Initialise the population with nearest neighbour routes
-    void InitialisePopulation(size_t populationSize) {
-        population.routes.clear();
-
-        for (size_t i = 0; i < populationSize; ++i) {
-            int startCityIndex = GetRandomIndex(cities.size());
-            Route nnRoute = NearestNeighbourRoute(startCityIndex);
-            nnRoute.CalculateDistance(distanceMatrix);
-            population.routes.push_back(nnRoute);
+        if (minFromLast < std::numeric_limits<double>::max()) {
+            bound += minFromLast;
         }
-    }
 
-    // Apply the 3-opt optimisation algorithm on a route
-    void ThreeOpt(Route& route) {
-        bool improvement = true;
-        while (improvement) {
-            improvement = false;
-            for (size_t i = 0; i < route.cities.size() - 2; ++i) {
-                for (size_t j = i + 1; j < route.cities.size() - 1; ++j) {
-                    for (size_t k = j + 1; k < route.cities.size(); ++k) {
-                        double currentDistance = distanceMatrix[route.cities[i].index][route.cities[i + 1].index] +
-                                                distanceMatrix[route.cities[j].index][route.cities[j + 1].index] +
-                                                distanceMatrix[route.cities[k].index][route.cities[(k + 1) % route.cities.size()].index];
-
-                        double newDistance = distanceMatrix[route.cities[i].index][route.cities[j].index] +
-                                            distanceMatrix[route.cities[i + 1].index][route.cities[k].index] +
-                                            distanceMatrix[route.cities[j + 1].index][route.cities[(k + 1) % route.cities.size()].index];
-
-                        if (newDistance < currentDistance) {
-                            std::reverse(route.cities.begin() + i + 1, route.cities.begin() + j + 1);
-                            std::reverse(route.cities.begin() + j + 1, route.cities.begin() + k + 1);
-                            route.CalculateDistance(distanceMatrix);
-                            improvement = true;
-                        }
+        // For each unvisited city, add minimum outgoing edge
+        for (size_t i = 0; i < n; ++i) {
+            if (!visited[i]) {
+                double minEdge = std::numeric_limits<double>::max();
+                for (size_t j = 0; j < n; ++j) {
+                    if (i != j && (!visited[j] || j == 0)) { // Can go to unvisited or back to start
+                        minEdge = std::min(minEdge, distanceMatrix[i][j]);
                     }
                 }
+                if (minEdge < std::numeric_limits<double>::max()) {
+                    bound += minEdge;
+                }
+            }
+        }
+
+        return bound;
+    }
+
+    // ==================== HEURISTIC ALGORITHMS ====================
+
+    // Nearest Neighbor heuristic
+    std::vector<int> NearestNeighborPath(int startCity) const {
+        size_t n = cities.size();
+        std::vector<int> path;
+        path.reserve(n);
+        std::vector<bool> visited(n, false);
+        
+        path.push_back(startCity);
+        visited[startCity] = true;
+        
+        while (path.size() < n) {
+            int current = path.back();
+            double minDist = std::numeric_limits<double>::max();
+            int nearest = -1;
+            
+            for (size_t i = 0; i < n; ++i) {
+                if (!visited[i] && distanceMatrix[current][i] < minDist) {
+                    minDist = distanceMatrix[current][i];
+                    nearest = i;
+                }
+            }
+            
+            path.push_back(nearest);
+            visited[nearest] = true;
+        }
+        
+        return path;
+    }
+
+    // 2-opt improvement - very effective local search
+    bool TwoOptImprove(std::vector<int>& path) const {
+        size_t n = path.size();
+        bool improved = true;
+        bool anyImprovement = false;
+        
+        while (improved) {
+            improved = false;
+            for (size_t i = 0; i < n - 1; ++i) {
+                for (size_t j = i + 2; j < n; ++j) {
+                    // Calculate improvement from reversing segment [i+1, j]
+                    size_t nextJ = (j + 1) % n;
+                    
+                    double oldDist = distanceMatrix[path[i]][path[i + 1]] +
+                                     distanceMatrix[path[j]][path[nextJ]];
+                    double newDist = distanceMatrix[path[i]][path[j]] +
+                                     distanceMatrix[path[i + 1]][path[nextJ]];
+                    
+                    if (newDist < oldDist - 1e-10) {
+                        std::reverse(path.begin() + i + 1, path.begin() + j + 1);
+                        improved = true;
+                        anyImprovement = true;
+                    }
+                }
+            }
+        }
+        return anyImprovement;
+    }
+
+    // Or-opt: move a sequence of 1, 2, or 3 consecutive cities
+    bool OrOptImprove(std::vector<int>& path) const {
+        size_t n = path.size();
+        bool improved = true;
+        bool anyImprovement = false;
+        
+        while (improved) {
+            improved = false;
+            // Try moving segments of length 1, 2, and 3
+            for (int segLen = 1; segLen <= 3 && segLen <= (int)n - 2; ++segLen) {
+                for (size_t i = 0; i < n - segLen; ++i) {
+                    for (size_t j = 0; j < n; ++j) {
+                        if (j >= i && j <= i + segLen) continue;
+                        
+                        // Calculate cost of removing segment [i, i+segLen-1] and inserting after j
+                        size_t prevI = (i + n - 1) % n;
+                        size_t nextSeg = (i + segLen) % n;
+                        size_t nextJ = (j + 1) % n;
+                        
+                        double oldCost = distanceMatrix[path[prevI]][path[i]] +
+                                         distanceMatrix[path[i + segLen - 1]][path[nextSeg]] +
+                                         distanceMatrix[path[j]][path[nextJ]];
+                        
+                        double newCost = distanceMatrix[path[prevI]][path[nextSeg]] +
+                                         distanceMatrix[path[j]][path[i]] +
+                                         distanceMatrix[path[i + segLen - 1]][path[nextJ]];
+                        
+                        if (newCost < oldCost - 1e-10) {
+                            // Perform the move
+                            std::vector<int> segment(path.begin() + i, path.begin() + i + segLen);
+                            path.erase(path.begin() + i, path.begin() + i + segLen);
+                            
+                            size_t insertPos = (j > i) ? j - segLen + 1 : j + 1;
+                            path.insert(path.begin() + insertPos, segment.begin(), segment.end());
+                            
+                            improved = true;
+                            anyImprovement = true;
+                            break;
+                        }
+                    }
+                    if (improved) break;
+                }
+                if (improved) break;
+            }
+        }
+        return anyImprovement;
+    }
+
+    // Lin-Kernighan style improvement with multiple restarts
+    void SolveWithLKHeuristic() {
+        size_t n = cities.size();
+        bestDistance = std::numeric_limits<double>::max();
+        
+        // Generate multiple starting solutions and improve each
+        for (size_t start = 0; start < n; ++start) {
+            std::vector<int> path = NearestNeighborPath(start);
+            
+            // Apply iterative improvement
+            bool improved = true;
+            while (improved) {
+                improved = TwoOptImprove(path);
+                improved = OrOptImprove(path) || improved;
+            }
+            
+            double dist = CalculateTourDistance(path);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestPath = path;
+            }
+        }
+        
+        // Also try random starting permutations
+        size_t numRandomStarts = std::min((size_t)50, n * n);
+        std::vector<int> randomPath(n);
+        std::iota(randomPath.begin(), randomPath.end(), 0);
+        
+        for (size_t r = 0; r < numRandomStarts; ++r) {
+            std::shuffle(randomPath.begin(), randomPath.end(), gen);
+            std::vector<int> path = randomPath;
+            
+            bool improved = true;
+            while (improved) {
+                improved = TwoOptImprove(path);
+                improved = OrOptImprove(path) || improved;
+            }
+            
+            double dist = CalculateTourDistance(path);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestPath = path;
             }
         }
     }
@@ -253,7 +329,6 @@ private:
         std::istringstream ss(csvData);
         std::string line;
 
-        // Read the header line to get city names
         if (!std::getline(ss, line)) {
             std::cerr << "Error reading CSV data." << std::endl;
             return;
@@ -263,14 +338,12 @@ private:
         std::string cityName;
         size_t index = 0;
 
-        // Read city names from the header, skipping the first empty cell
         std::istringstream headerStream(line);
-        std::getline(headerStream, cityName, ','); // Skip first cell
+        std::getline(headerStream, cityName, ',');
         while (std::getline(headerStream, cityName, ',')) {
             cityNames.emplace_back(cityName, index++);
         }
 
-        // Read the distances
         std::vector<std::vector<double>> localDistanceMatrix;
         double distance;
         char comma;
@@ -279,11 +352,11 @@ private:
             std::istringstream lineStream(line);
             std::vector<double> distances;
 
-            std::getline(lineStream, cityName, ','); // Read and ignore city name
+            std::getline(lineStream, cityName, ',');
 
             while (lineStream >> distance) {
                 distances.push_back(distance);
-                lineStream >> comma; // Read and ignore comma
+                lineStream >> comma;
             }
 
             localDistanceMatrix.push_back(std::move(distances));
@@ -294,47 +367,38 @@ private:
     }
 
 public:
-    TSPSolver(const std::vector<std::vector<double>>& matrix, const std::vector<City>& inputCities, size_t populationSize) 
-    : distanceMatrix(matrix), cities(inputCities), population(populationSize),
-      dist(0.0, 1.0), intDist(0, static_cast<int>(inputCities.size() - 1)) {
+    TSPSolver(const std::vector<std::vector<double>>& matrix, const std::vector<City>& inputCities, size_t /* populationSize - ignored */) 
+    : distanceMatrix(matrix), cities(inputCities) {
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
         gen.seed(seed);
-        InitialisePopulation(populationSize);
     }
 
-    TSPSolver(const std::string& csvData, size_t populationSize) 
-    : population(populationSize), dist(0.0, 1.0) {
+    TSPSolver(const std::string& csvData, size_t /* populationSize - ignored */) {
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
         gen.seed(seed);
         InitialiseFromCSV(csvData);
-        InitialisePopulation(populationSize);
     }
 
     bool Run() {
-        size_t numElites = 0.05 * population.routes.size();
-
-        for (currentGeneration = 0; currentGeneration < NUM_GENERATIONS; ++currentGeneration) {
-            Population newPopulation(population.routes.size());
-
-            // Sort the current population by route distance
-            std::sort(population.routes.begin(), population.routes.end());
-
-            // Carry over elite routes
-            for (size_t i = 0; i < numElites; ++i) {
-                newPopulation.routes.push_back(population.routes[i]);
-            }
-
-            // Fill the rest of the new population
-            while (newPopulation.routes.size() < population.routes.size()) {
-                Route parent1 = RouletteWheelSelection(population);
-                Route parent2 = RouletteWheelSelection(population);
-                Route child = Crossover(parent1, parent2);
-                Mutate(child);
-                ThreeOpt(child); // Apply 3-opt optimisation
-                newPopulation.routes.push_back(std::move(child));
-            }
-
-            population = std::move(newPopulation);
+        size_t n = cities.size();
+        
+        if (n <= 1) {
+            bestPath.clear();
+            if (n == 1) bestPath.push_back(0);
+            bestDistance = 0;
+            isComplete = true;
+            return true;
+        }
+        
+        if (n <= EXACT_THRESHOLD) {
+            // Use brute force for small instances - guaranteed optimal
+            SolveBruteForce();
+        } else if (n <= BRANCH_BOUND_THRESHOLD) {
+            // Use branch and bound for medium instances - guaranteed optimal but slower
+            BranchAndBound();
+        } else {
+            // Use LK-style heuristic for larger instances - very good but not guaranteed optimal
+            SolveWithLKHeuristic();
         }
 
         isComplete = true;
@@ -344,21 +408,16 @@ public:
     std::string GetBestRoute() {
         if (!isComplete) return "Not complete";
 
-        const Route& bestRoute = *std::min_element(population.routes.begin(), population.routes.end());
-
         std::stringstream ss;
-        for (const auto& city : bestRoute.cities) {
-            std::string name = city.name;
-            ss << name << std::endl;
+        for (int idx : bestPath) {
+            ss << cities[idx].name << std::endl;
         }
         return ss.str();
     }
 
     int GetBestRouteLength() {
         if (!isComplete) return -1;
-
-        const Route& bestRoute = *std::min_element(population.routes.begin(), population.routes.end());
-        return bestRoute.distance;
+        return static_cast<int>(bestDistance);
     }
 };
 
